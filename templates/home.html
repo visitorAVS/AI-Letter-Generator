@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Chithi - Letter Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            background: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #667eea;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-email {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .logout-btn:hover {
+            background: #764ba2;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .form-section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .form-section h2 {
+            color: #667eea;
+            font-size: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .required {
+            color: #e74c3c;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .optional {
+            font-size: 12px;
+            color: #999;
+            font-weight: normal;
+            margin-left: 5px;
+        }
+
+        .signature-section {
+            border-top: 2px solid #e0e0e0;
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+
+        .signature-options {
+            display: grid;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .sig-option {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+
+        .sig-option:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+
+        .sig-option.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .generate-btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 20px;
+        }
+
+        .generate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .generate-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .output-section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .output-section h2 {
+            color: #667eea;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        .letter-content {
+            background: #f9f9f9;
+            padding: 25px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.8;
+            font-size: 14px;
+            color: #333;
+            min-height: 300px;
+            max-height: 600px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            min-width: 120px;
+        }
+
+        .btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .btn-primary:hover {
+            background: #764ba2;
+            border-color: #764ba2;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 40px 20px;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            padding: 40px;
+            display: none;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fee;
+            border-left: 4px solid #e74c3c;
+            color: #c33;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .success {
+            background: #efe;
+            border-left: 4px solid #27ae60;
+            color: #3a3;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            color: #666;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .history-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #667eea;
+        }
+
+        .history-meta {
+            flex: 1;
+        }
+
+        .history-subject {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .history-date {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .history-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .history-actions button {
+            padding: 6px 12px;
+            font-size: 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .view-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        .view-btn:hover {
+            background: #764ba2;
+        }
+
+        .delete-btn {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .delete-btn:hover {
+            background: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📝 Smart Chithi</h1>
+            <div class="user-info">
+                <span class="user-email" id="userEmail"></span>
+                <button class="logout-btn" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Form Section -->
+            <div class="form-section">
+                <h2>✍️ Create Letter</h2>
+
+                <div class="error" id="error"></div>
+
+                <form id="letterForm">
+                    <div class="form-group">
+                        <label>Letter Type <span class="required">*</span></label>
+                        <select id="letterType" required>
+                            <option value="">Select letter type</option>
+                            <option value="Job Application">Job Application</option>
+                            <option value="Resignation Letter">Resignation Letter</option>
+                            <option value="Leave Application">Leave Application</option>
+                            <option value="Complaint Letter">Complaint Letter</option>
+                            <option value="Request Letter">Request Letter</option>
+                            <option value="Formal Email">Formal Email</option>
+                            <option value="Recommendation Letter">Recommendation Letter</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Language <span class="required">*</span></label>
+                        <select id="language" required>
+                            <option value="English">English</option>
+                            <option value="Hindi">Hindi (हिंदी)</option>
+                            <option value="Marathi">Marathi (मराठी)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Your Name <span class="required">*</span></label>
+                        <input type="text" id="senderName" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Receiver Name <span class="required">*</span></label>
+                        <input type="text" id="receiverName" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Receiver Designation <span class="required">*</span></label>
+                        <input type="text" id="receiverDesignation" placeholder="e.g., HR Manager, Principal">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Organization/Institution</label>
+                        <input type="text" id="organization">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Subject <span class="required">*</span></label>
+                        <input type="text" id="subject" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Reason/Details <span class="optional">Optional</span></label>
+                        <textarea id="reason" placeholder="Provide additional context if needed..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Tone <span class="required">*</span></label>
+                        <select id="tone" required>
+                            <option value="Formal">Formal</option>
+                            <option value="Professional">Professional</option>
+                            <option value="Polite">Polite</option>
+                            <option value="Urgent">Urgent</option>
+                        </select>
+                    </div>
+
+                    <div class="signature-section">
+                        <label>Choose Signature Style</label>
+                        <div style="margin-bottom: 15px;">
+                            <input type="text" id="signatureName" placeholder="Enter your name for signature">
+                            <button type="button" class="btn btn-primary" onclick="generateSignatures()" style="width: 100%; margin-top: 10px;">Generate Signature Options</button>
+                        </div>
+                        <div class="signature-options" id="signatureOptions">
+                            <p style="color: #999; text-align: center; padding: 20px;">Enter your name above and click Generate</p>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="generate-btn">Generate Letter</button>
+                </form>
+            </div>
+
+            <!-- Output Section -->
+            <div class="output-section">
+                <h2>📄 Generated Letter</h2>
+
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('preview')">Preview</button>
+                    <button class="tab" onclick="switchTab('history')">History</button>
+                </div>
+
+                <!-- Preview Tab -->
+                <div id="preview" class="tab-content active">
+                    <div class="loading" id="loading">
+                        <div class="spinner"></div>
+                        <p>Generating your letter...</p>
+                    </div>
+
+                    <div id="emptyState" class="empty-state">
+                        👈 Fill in the form and click "Generate Letter" to create your professional letter
+                    </div>
+
+                    <div id="letterOutput" style="display: none;">
+                        <div class="success" id="success"></div>
+                        <div class="letter-content" id="letterContent"></div>
+                        <div class="action-buttons">
+                            <button class="btn btn-primary" onclick="copyToClipboard()">📋 Copy</button>
+                            <button class="btn btn-primary" onclick="downloadLetter()">⬇️ Download</button>
+                            <button class="btn" onclick="printLetter()">🖨️ Print</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History Tab -->
+                <div id="history" class="tab-content">
+                    <div id="historyList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentLetterId = null;
+        let currentLetterContent = '';
+
+        // Load user info
+        document.addEventListener('DOMContentLoaded', function() {
+            const userEmail = localStorage.getItem('userEmail');
+            if (userEmail) {
+                document.getElementById('userEmail').textContent = userEmail;
+            }
+            loadHistory();
+        });
+
+        // Form submission
+        document.getElementById('letterForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = {
+                letterType: document.getElementById('letterType').value,
+                language: document.getElementById('language').value,
+                senderName: document.getElementById('senderName').value,
+                receiverName: document.getElementById('receiverName').value,
+                receiverDesignation: document.getElementById('receiverDesignation').value,
+                organization: document.getElementById('organization').value,
+                subject: document.getElementById('subject').value,
+                reason: document.getElementById('reason').value,
+                tone: document.getElementById('tone').value,
+                signature: document.querySelector('.sig-option.selected')?.textContent || ''
+            };
+
+            // Validation
+            if (!formData.letterType || !formData.senderName || !formData.receiverName || !formData.subject || !formData.tone) {
+                showError('Please fill all required fields');
+                return;
+            }
+
+            showLoading(true);
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentLetterContent = data.letter;
+                    currentLetterId = data.letterId;
+                    displayLetter(data.letter);
+                    showSuccess('Letter generated successfully!');
+                    loadHistory();
+                } else {
+                    showError(data.error || 'Failed to generate letter');
+                }
+            } catch (error) {
+                showError('Error: ' + error.message);
+            } finally {
+                showLoading(false);
+            }
+        });
+
+        async function generateSignatures() {
+            const name = document.getElementById('signatureName').value.trim();
+            if (!name) {
+                showError('Please enter your name');
+                return;
+            }
+
+            try {
+                const response = await fetch('/generate-signatures', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: name })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const options = document.getElementById('signatureOptions');
+                    options.innerHTML = data.signatures.map(sig => `
+                        <div class="sig-option" onclick="selectSignature(this, '${sig}')">${sig}</div>
+                    `).join('');
+                } else {
+                    showError(data.error || 'Failed to generate signatures');
+                }
+            } catch (error) {
+                showError('Error: ' + error.message);
+            }
+        }
+
+        function selectSignature(element, signature) {
+            document.querySelectorAll('.sig-option').forEach(el => el.classList.remove('selected'));
+            element.classList.add('selected');
+        }
+
+        function displayLetter(content) {
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('letterOutput').style.display = 'block';
+            document.getElementById('letterContent').textContent = content;
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showError(msg) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function showSuccess(msg) {
+            const successDiv = document.getElementById('success');
+            successDiv.textContent = msg;
+            successDiv.style.display = 'block';
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function copyToClipboard() {
+            navigator.clipboard.writeText(currentLetterContent).then(() => {
+                showSuccess('Copied to clipboard!');
+            }).catch(() => {
+                showError('Failed to copy');
+            });
+        }
+
+        function downloadLetter() {
+            const element = document.createElement('a');
+            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(currentLetterContent));
+            element.setAttribute('download', 'letter_' + new Date().getTime() + '.txt');
+            element.style.display = 'none';
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+            showSuccess('Letter downloaded!');
+        }
+
+        function printLetter() {
+            const printWindow = window.open('', '', 'height=600,width=800');
+            printWindow.document.write('<pre style="font-family: Arial; line-height: 1.8; margin: 20px;">' + currentLetterContent + '</pre>');
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch('/history');
+                const letters = await response.json();
+
+                const historyList = document.getElementById('historyList');
+                if (letters.length === 0) {
+                    historyList.innerHTML = '<p style="text-align: center; color: #999; padding: 40px;">No letters yet. Create one to get started!</p>';
+                    return;
+                }
+
+                historyList.innerHTML = letters.map(letter => `
+                    <div class="history-item">
+                        <div class="history-meta">
+                            <div class="history-subject">${letter.subject}</div>
+                            <div class="history-date">${letter.timestamp}</div>
+                        </div>
+                        <div class="history-actions">
+                            <button class="view-btn" onclick="viewLetter('${letter.id}')">View</button>
+                            <button class="delete-btn" onclick="deleteLetter('${letter.id}')">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        async function viewLetter(letterId) {
+            try {
+                const response = await fetch(`/history/${letterId}`);
+                const letter = await response.json();
+                currentLetterContent = letter.content;
+                displayLetter(letter.content);
+                switchTab('preview');
+            } catch (error) {
+                showError('Failed to load letter');
+            }
+        }
+
+        async function deleteLetter(letterId) {
+            if (!confirm('Are you sure you want to delete this letter?')) return;
+
+            try {
+                const response = await fetch(`/delete/${letterId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showSuccess('Letter deleted');
+                    loadHistory();
+                } else {
+                    showError('Failed to delete letter');
+                }
+            } catch (error) {
+                showError('Error: ' + error.message);
+            }
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            if (tabName === 'history') {
+                loadHistory();
+            }
+        }
+
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = '/logout';
+            }
+        }
+    </script>
+</body>
+</html>
