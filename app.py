@@ -22,7 +22,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
 
 # =========================
 # Flask App Setup
@@ -136,22 +135,31 @@ def generate_pdf(letter_content, sender_name, receiver_name, organization=""):
         pdf_buffer = BytesIO()
         doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
         story = []
-        styles = getSampleStyleSheet()
         
-        # Custom style
+        # Use UTF-8 compatible style
+        styles = getSampleStyleSheet()
         style = ParagraphStyle(
-            'Custom',
+            'CustomStyle',
             parent=styles['Normal'],
             fontSize=11,
             leading=18,
-            alignment=4  # Justify
+            alignment=4,
+            encoding='utf-8'
         )
         
-        # Add content
-        para = Paragraph(letter_content.replace('\n', '<br/>'), style)
-        story.append(para)
+        # Clean content and split into paragraphs
+        content_lines = letter_content.split('\n')
+        for line in content_lines:
+            if line.strip():
+                try:
+                    para = Paragraph(line.replace('\n', '<br/>'), style)
+                    story.append(para)
+                except:
+                    # Fallback for problematic characters
+                    para = Paragraph(str(line), style)
+                    story.append(para)
+            story.append(Spacer(1, 0.1*inch))
         
-        # Build PDF
         doc.build(story)
         pdf_buffer.seek(0)
         return pdf_buffer.getvalue()
