@@ -52,26 +52,6 @@
             background-clip: text;
         }
 
-        .navbar-menu {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-        }
-
-        .navbar-menu a, .navbar-menu button {
-            text-decoration: none;
-            color: var(--dark);
-            font-weight: 600;
-            cursor: pointer;
-            background: none;
-            border: none;
-            transition: all 0.3s;
-        }
-
-        .navbar-menu a:hover, .navbar-menu button:hover {
-            color: var(--primary);
-        }
-
         .user-menu {
             display: flex;
             align-items: center;
@@ -188,6 +168,7 @@
             cursor: pointer;
             font-weight: 600;
             transition: all 0.3s;
+            font-size: 14px;
         }
 
         .btn-primary {
@@ -253,6 +234,15 @@
             text-align: center;
             padding: 60px 20px;
             color: var(--gray);
+            background: var(--light);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .empty-preview i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.4;
         }
 
         .action-buttons {
@@ -339,6 +329,14 @@
             border-bottom: 1px solid var(--border);
         }
 
+        .letters-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .letters-table tr:hover td {
+            background: #f9fafb;
+        }
+
         .letter-badge {
             display: inline-block;
             padding: 4px 12px;
@@ -357,6 +355,7 @@
             font-size: 12px;
             font-weight: 600;
             margin-right: 5px;
+            transition: all 0.2s;
         }
 
         .btn-view {
@@ -364,16 +363,23 @@
             color: white;
         }
 
+        .btn-view:hover {
+            background: var(--primary-dark);
+        }
+
         .btn-delete {
             background: var(--danger);
             color: white;
+        }
+
+        .btn-delete:hover {
+            background: #dc2626;
         }
 
         @media (max-width: 1024px) {
             .main-content {
                 grid-template-columns: 1fr;
             }
-
             .preview-section {
                 position: static;
             }
@@ -384,12 +390,11 @@
                 flex-direction: column;
                 gap: 15px;
             }
-
             .letters-table {
                 font-size: 12px;
             }
-
-            .letters-table th, .letters-table td {
+            .letters-table th,
+            .letters-table td {
                 padding: 10px;
             }
         }
@@ -400,11 +405,11 @@
         <div class="navbar-brand">
             <i class="fas fa-pen-nib"></i> Smart Chithi
         </div>
-        <div class="navbar-menu">
-            <div class="user-menu">
-                <div class="user-avatar" id="userAvatar">👤</div>
-                <button class="logout-btn" onclick="logout()">Logout</button>
-            </div>
+        <div class="user-menu">
+            <div class="user-avatar" id="userAvatar">👤</div>
+            <button class="logout-btn" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
         </div>
     </nav>
 
@@ -415,6 +420,7 @@
         </div>
 
         <div class="main-content">
+            <!-- Form Section -->
             <div class="form-section">
                 <h2><i class="fas fa-edit"></i> Create Letter</h2>
 
@@ -476,8 +482,8 @@
                     </div>
 
                     <div class="form-group">
-                        <label>Additional Details</label>
-                        <textarea id="reason" placeholder="Any extra context..." style="min-height: 80px;"></textarea>
+                        <label>Additional Details <span style="color:var(--gray);font-weight:400;">(optional)</span></label>
+                        <textarea id="reason" placeholder="Any extra context, dates, or details..." style="min-height: 80px;"></textarea>
                     </div>
 
                     <div class="form-group">
@@ -491,28 +497,30 @@
                     </div>
 
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-sparkles"></i> Generate Letter
+                        <i class="fas fa-magic"></i> Generate Letter
                     </button>
                 </form>
             </div>
 
+            <!-- Preview Section -->
             <div class="preview-section">
                 <h2><i class="fas fa-file-alt"></i> Preview</h2>
 
                 <div id="loading" class="loading" style="display: none;">
                     <div class="spinner"></div>
-                    <p>Generating...</p>
+                    <p>Generating your letter...</p>
                 </div>
 
                 <div id="letterPreview" class="letter-preview"></div>
 
                 <div id="emptyPreview" class="empty-preview">
-                    <p>Fill the form and generate a letter</p>
+                    <i class="fas fa-file-alt"></i>
+                    <p>Fill the form and click <strong>Generate Letter</strong></p>
                 </div>
 
                 <div id="actionButtons" class="action-buttons" style="display: none;">
                     <button class="btn btn-primary" onclick="copyLetter()">
-                        <i class="fas fa-copy"></i> Copy
+                        <i class="fas fa-copy"></i> Copy to Clipboard
                     </button>
                     <button class="btn btn-primary" onclick="downloadPDF()">
                         <i class="fas fa-file-pdf"></i> Download PDF
@@ -527,6 +535,7 @@
             </div>
         </div>
 
+        <!-- History Section -->
         <div class="history-section">
             <h2><i class="fas fa-history"></i> Your Letters</h2>
             <table class="letters-table">
