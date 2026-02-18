@@ -5,9 +5,6 @@ from datetime import datetime
 import requests
 from functools import wraps
 import re
-import base64
-from io import BytesIO
-from werkzeug.utils import secure_filename
 
 # Load environment variables
 load_dotenv()
@@ -16,12 +13,6 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from flask_cors import CORS
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
-
-# PDF Libraries
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.units import inch
 
 # =========================
 # Flask App Setup
@@ -129,44 +120,6 @@ def generate_signature(name):
     
     return signatures
 
-def generate_pdf(letter_content, sender_name, receiver_name, organization=""):
-    """Generate PDF from letter content"""
-    try:
-        pdf_buffer = BytesIO()
-        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter)
-        story = []
-        
-        # Use UTF-8 compatible style
-        styles = getSampleStyleSheet()
-        style = ParagraphStyle(
-            'CustomStyle',
-            parent=styles['Normal'],
-            fontSize=11,
-            leading=18,
-            alignment=4,
-            encoding='utf-8'
-        )
-        
-        # Clean content and split into paragraphs
-        content_lines = letter_content.split('\n')
-        for line in content_lines:
-            if line.strip():
-                try:
-                    para = Paragraph(line.replace('\n', '<br/>'), style)
-                    story.append(para)
-                except:
-                    # Fallback for problematic characters
-                    para = Paragraph(str(line), style)
-                    story.append(para)
-            story.append(Spacer(1, 0.1*inch))
-        
-        doc.build(story)
-        pdf_buffer.seek(0)
-        return pdf_buffer.getvalue()
-    except Exception as e:
-        print(f"PDF generation error: {e}")
-        return None
-
 def save_to_firebase(letter_data, user_id):
     """Save letter to Firebase"""
     if db is None:
@@ -226,17 +179,6 @@ def delete_from_firebase(user_id, letter_id):
         return True
     except Exception as e:
         print("Firebase delete error:", e)
-        return False
-
-def update_letter_in_firebase(user_id, letter_id, updated_data):
-    """Update existing letter in Firebase"""
-    if db is None:
-        return False
-    try:
-        db.collection("users").document(user_id).collection("letters").document(letter_id).update(updated_data)
-        return True
-    except Exception as e:
-        print("Firebase update error:", e)
         return False
 
 def generate_letter_with_gemini(letter_type, language, sender_name, receiver_name,
@@ -498,8 +440,6 @@ def generate():
             "reason": data.get("reason", ""),
             "tone": data.get("tone"),
             "signature": data.get("signature", ""),
-            "senderAddress": data.get("senderAddress", ""),
-            "receiverAddress": data.get("receiverAddress", ""),
             "content": letter_content
         }
 
@@ -557,81 +497,6 @@ def delete_letter(letter_id):
     if delete_from_firebase(user_id, letter_id):
         return jsonify({"success": True})
     return jsonify({"success": False}), 500
-
-@app.route("/edit-letter/<letter_id>", methods=["POST"])
-@login_required
-def edit_letter(letter_id):
-    """Update letter content"""
-    try:
-        user_id = session['user']['uid']
-        data = request.get_json()
-        
-        updated_data = {
-            "content": data.get("content"),
-            "senderName": data.get("senderName"),
-            "receiverName": data.get("receiverName"),
-            "senderAddress": data.get("senderAddress", ""),
-            "receiverAddress": data.get("receiverAddress", ""),
-            "signature": data.get("signature", ""),
-            "updated_at": datetime.now()
-        }
-        
-        if update_letter_in_firebase(user_id, letter_id, updated_data):
-            return jsonify({"success": True, "message": "Letter updated"})
-        return jsonify({"success": False}), 500
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route("/download-pdf/<letter_id>", methods=["GET"])
-@login_required
-def download_pdf(letter_id):
-    """Download letter as PDF"""
-    try:
-        user_id = session['user']['uid']
-        letter = get_letter_from_firebase(user_id, letter_id)
-        
-        if not letter:
-            return jsonify({"error": "Letter not found"}), 404
-        
-        pdf_content = generate_pdf(
-            letter.get("content", ""),
-            letter.get("senderName", ""),
-            letter.get("receiverName", ""),
-            letter.get("organization", "")
-        )
-        
-        if not pdf_content:
-            return jsonify({"error": "PDF generation failed"}), 500
-        
-        return pdf_content, 200, {
-            'Content-Type': 'application/pdf',
-            'Content-Disposition': f'attachment; filename=letter_{letter_id}.pdf'
-        }
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
-
-@app.route("/upload-signature", methods=["POST"])
-@login_required
-def upload_signature():
-    """Handle signature image upload"""
-    try:
-        if 'signature' not in request.files:
-            return jsonify({"error": "No file provided"}), 400
-        
-        file = request.files['signature']
-        if file.filename == '':
-            return jsonify({"error": "No file selected"}), 400
-        
-        # Convert to base64
-        file_content = file.read()
-        base64_content = base64.b64encode(file_content).decode('utf-8')
-        
-        return jsonify({
-            "success": True,
-            "signature": base64_content
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/health")
 def health():
