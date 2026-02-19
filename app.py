@@ -5,22 +5,23 @@ from datetime import datetime, timedelta
 import requests
 from functools import wraps
 from io import BytesIO
+import jwt
 
 load_dotenv()
 
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file, make_response
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_file, make_response
 from flask_cors import CORS
 import firebase_admin
 from firebase_admin import credentials, firestore, auth
 from fpdf import FPDF
-import uuid
 
 # =========================
 # Flask App Setup
 # =========================
 app = Flask(__name__)
 IS_RENDER = bool(os.environ.get("RENDER", False))
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "smartchithi_super_secret_key_2024")
+SECRET_KEY = os.environ.get("SECRET_KEY", "smartchithi_super_secret_key_2024")
+app.config["SECRET_KEY"] = SECRET_KEY
 CORS(app, supports_credentials=True)
 
 # =========================
@@ -41,10 +42,7 @@ if GEMINI_API_KEY:
                 for model in data["models"]:
                     name = model.get("name", "").replace("models/", "")
                     methods = model.get("supportedGenerationMethods", [])
-                    if methods:
-                        method_names = [m.get("name", "") if isinstance(m, dict) else m for m in methods]
-                    else:
-                        method_names = []
+                    method_names = [m.get("name", "") if isinstance(m, dict) else m for m in methods]
                     if "generateContent" in method_names:
                         AVAILABLE_MODELS.append(name)
                 AVAILABLE_MODELS.sort()
@@ -73,62 +71,45 @@ except Exception as e:
     db = None
 
 # =========================
-# Firebase Session Management
-# ✅ Session Firebase mein store hoti hai — Render restart safe
+# ✅ JWT Session — No filesystem, No Firestore dependency
+# Cookie mein encrypted JWT store hoti hai
+# Render restart safe, multi-worker safe
 # =========================
 SESSION_COOKIE_NAME = "sc_token"
 SESSION_EXPIRY_DAYS = 7
 
-def create_firebase_session(user_data):
-    """Firebase mein session create karo, token return karo"""
-    if db is None:
-        return None
+def create_session(user_data):
+    """JWT token banao"""
     try:
-        token = str(uuid.uuid4())
-        expiry = datetime.utcnow() + timedelta(days=SESSION_EXPIRY_DAYS)
-        db.collection("sessions").document(token).set({
+        payload = {
             "user": user_data,
-            "created_at": datetime.utcnow(),
-            "expires_at": expiry
-        })
+            "exp": datetime.utcnow() + timedelta(days=SESSION_EXPIRY_DAYS),
+            "iat": datetime.utcnow()
+        }
+        token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
         return token
     except Exception as e:
-        print(f"Session create error: {e}")
+        print(f"JWT create error: {e}")
         return None
 
-def get_firebase_session(token):
-    """Token se Firebase session fetch karo"""
-    if db is None or not token:
-        return None
-    try:
-        doc = db.collection("sessions").document(token).get()
-        if not doc.exists:
-            return None
-        data = doc.to_dict()
-        expires_at = data.get("expires_at")
-        if expires_at and datetime.utcnow() > expires_at:
-            db.collection("sessions").document(token).delete()
-            return None
-        return data.get("user")
-    except Exception as e:
-        print(f"Session get error: {e}")
-        return None
-
-def delete_firebase_session(token):
-    """Session delete karo"""
-    if db is None or not token:
-        return
-    try:
-        db.collection("sessions").document(token).delete()
-    except Exception as e:
-        print(f"Session delete error: {e}")
-
-def get_current_user():
-    """Current request se user fetch karo"""
-    token = request.cookies.get(SESSION_COOKIE_NAME)
+def get_session(token):
+    """JWT token decode karo"""
     if not token:
         return None
-    return get_firebase_session(token)
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return payload.get("user")
+    except jwt.ExpiredSignatureError:
+        print("JWT expired")
+        return None
+    except Exception as e:
+        print(f"JWT decode error: {e}")
+        return None
+
+def get_current_user():
+    """Cookie se user nikalo"""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    return get_session(token)
 
 def login_required(f):
     @wraps(f)
@@ -209,7 +190,6 @@ def generate_letter_with_gemini(letter_type, language, sender_name, receiver_nam
         return "Error: No available models found."
 
     reason_prompt = f"- Reason/Details: {reason}" if reason and reason.strip() else ""
-
     prompt = f"""You are a professional formal letter writer.
 Generate a formal {letter_type} in {language}.
 
@@ -240,23 +220,18 @@ RULES:
                 "contents": [{"parts": [{"text": prompt}]}],
                 "generationConfig": {"temperature": 0.7, "topK": 40, "topP": 0.95, "maxOutputTokens": 2048}
             }
-            print(f"Trying model: {model_name}")
             response = requests.post(full_url, json=payload, timeout=30)
             if response.status_code == 200:
                 data = response.json()
                 if "candidates" in data and data["candidates"]:
                     content = data["candidates"][0]["content"]["parts"][0]["text"]
-                    print(f"✅ Success with {model_name}")
                     return content.replace("**", "")
             elif response.status_code == 404:
-                continue
-            else:
-                print(f"⚠️ {model_name}: {response.status_code}")
                 continue
         except requests.exceptions.Timeout:
             continue
         except Exception as e:
-            print(f"⚠️ {model_name} exception: {e}")
+            print(f"⚠️ {model_name}: {e}")
             continue
 
     return "Error: No available models could generate the letter."
@@ -311,9 +286,7 @@ def create_pdf_from_letter(letter_content, subject, sender_name):
 @app.route("/")
 def index():
     user = get_current_user()
-    if user:
-        return redirect(url_for('home'))
-    return redirect(url_for('login'))
+    return redirect(url_for('home') if user else url_for('login'))
 
 @app.route("/login")
 def login():
@@ -331,12 +304,17 @@ def auth_google():
             return jsonify({"success": False, "error": "No token provided"}), 400
 
         print("🔍 Verifying token...")
+        decoded_token = None
 
+        # Firebase verify try karo
         try:
             decoded_token = auth.verify_id_token(id_token)
             print("✅ Firebase token verified!")
         except Exception as firebase_error:
             print(f"⚠️ Firebase verify failed: {firebase_error}")
+
+        # Fallback: JWT manual decode
+        if not decoded_token:
             try:
                 import base64
                 parts = id_token.split('.')
@@ -347,11 +325,10 @@ def auth_google():
                         payload += '=' * padding
                     decoded_bytes = base64.urlsafe_b64decode(payload)
                     decoded_token = json.loads(decoded_bytes)
-                    print("✅ Token decoded (unverified)")
-                else:
-                    raise ValueError("Invalid token")
+                    print("✅ Token decoded manually (unverified)")
             except Exception as e:
-                return jsonify({"success": False, "error": "Invalid token"}), 401
+                print(f"❌ Manual decode failed: {e}")
+                return jsonify({"success": False, "error": "Token verification failed"}), 401
 
         uid = decoded_token.get('sub') or decoded_token.get('uid')
         email = decoded_token.get('email', '')
@@ -360,7 +337,9 @@ def auth_google():
         if not uid:
             return jsonify({"success": False, "error": "No user ID in token"}), 401
 
-        # Save user to Firebase
+        print(f"✅ User: {name} ({email})")
+
+        # Firebase mein user save karo
         try:
             if db:
                 user_ref = db.collection("users").document(uid)
@@ -371,33 +350,33 @@ def auth_google():
                     "last_login": datetime.utcnow(),
                     "created_at": created_at
                 }, merge=True)
+                print("✅ User saved to Firebase")
         except Exception as e:
-            print(f"⚠️ DB error: {e}")
+            print(f"⚠️ DB error (non-fatal): {e}")
 
-        # ✅ Firebase mein session create karo
+        # ✅ JWT token banao — no Firestore needed
         user_data = {"uid": uid, "email": email, "name": name}
-        token = create_firebase_session(user_data)
+        jwt_token = create_session(user_data)
 
-        if not token:
+        if not jwt_token:
             return jsonify({"success": False, "error": "Session creation failed"}), 500
 
-        print(f"✅ Firebase session created: {token[:8]}...")
+        print(f"✅ JWT session created for {name}")
 
-        # ✅ Cookie set karo response mein
-        response = make_response(jsonify({
+        resp = make_response(jsonify({
             "success": True,
             "message": "Login successful",
             "user": user_data
         }))
-        response.set_cookie(
+        resp.set_cookie(
             SESSION_COOKIE_NAME,
-            token,
+            jwt_token,
             max_age=SESSION_EXPIRY_DAYS * 24 * 60 * 60,
             httponly=True,
             secure=IS_RENDER,
             samesite="Lax"
         )
-        return response
+        return resp
 
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -407,19 +386,15 @@ def auth_google():
 
 @app.route("/logout")
 def logout():
-    token = request.cookies.get(SESSION_COOKIE_NAME)
-    delete_firebase_session(token)
-    response = make_response(redirect(url_for('login')))
-    response.delete_cookie(SESSION_COOKIE_NAME)
-    return response
+    resp = make_response(redirect(url_for('login')))
+    resp.delete_cookie(SESSION_COOKIE_NAME)
+    return resp
 
 @app.route("/auth/logout", methods=["POST"])
 def auth_logout():
-    token = request.cookies.get(SESSION_COOKIE_NAME)
-    delete_firebase_session(token)
-    response = make_response(jsonify({"success": True}))
-    response.delete_cookie(SESSION_COOKIE_NAME)
-    return response
+    resp = make_response(jsonify({"success": True}))
+    resp.delete_cookie(SESSION_COOKIE_NAME)
+    return resp
 
 @app.route("/home")
 @login_required
@@ -431,12 +406,7 @@ def check_auth():
     user = get_current_user()
     print(f"🔍 check-auth: {'✅ ' + user['name'] if user else '❌ not logged in'}")
     if user:
-        return jsonify({
-            "authenticated": True,
-            "name": user["name"],
-            "email": user["email"],
-            "uid": user["uid"]
-        })
+        return jsonify({"authenticated": True, "name": user["name"], "email": user["email"], "uid": user["uid"]})
     return jsonify({"authenticated": False})
 
 @app.route("/debug-session")
@@ -445,10 +415,11 @@ def debug_session():
     user = get_current_user()
     return jsonify({
         "token_present": bool(token),
-        "token_preview": token[:8] + "..." if token else None,
+        "token_preview": token[:20] + "..." if token else None,
         "user_found": bool(user),
         "user": user,
-        "is_render": IS_RENDER
+        "is_render": IS_RENDER,
+        "session_type": "JWT"
     })
 
 @app.route("/generate", methods=["POST"])
@@ -456,9 +427,7 @@ def debug_session():
 def generate():
     try:
         user = get_current_user()
-        user_id = user["uid"]
         data = request.get_json()
-
         letter_content = generate_letter_with_gemini(
             data.get("letterType"), data.get("language"),
             data.get("senderName"), data.get("receiverName"),
@@ -466,7 +435,6 @@ def generate():
             data.get("reason", ""), data.get("tone"),
             data.get("organization", "")
         )
-
         letter_data = {
             "letterType": data.get("letterType"),
             "language": data.get("language"),
@@ -479,10 +447,8 @@ def generate():
             "tone": data.get("tone"),
             "content": letter_content
         }
-
-        letter_id = save_to_firebase(letter_data, user_id)
+        letter_id = save_to_firebase(letter_data, user["uid"])
         return jsonify({"success": True, "letter": letter_content, "letterId": letter_id})
-
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -497,9 +463,7 @@ def history():
 def get_letter(letter_id):
     user = get_current_user()
     letter = get_letter_from_firebase(user["uid"], letter_id)
-    if letter:
-        return jsonify(letter)
-    return jsonify({"error": "Not found"}), 404
+    return jsonify(letter) if letter else jsonify({"error": "Not found"}), 404
 
 @app.route("/delete/<letter_id>", methods=["DELETE"])
 @login_required
@@ -517,7 +481,6 @@ def download_pdf(letter_id):
         letter = get_letter_from_firebase(user["uid"], letter_id)
         if not letter:
             return jsonify({"error": "Letter not found"}), 404
-
         pdf_buffer = create_pdf_from_letter(
             letter.get("content", ""),
             letter.get("subject", "Letter"),
@@ -525,12 +488,9 @@ def download_pdf(letter_id):
         )
         if not pdf_buffer:
             return jsonify({"error": "PDF generation failed"}), 500
-
         filename = f"{letter.get('letterType', 'letter').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         return send_file(pdf_buffer, mimetype='application/pdf', as_attachment=True, download_name=filename)
-
     except Exception as e:
-        print(f"PDF error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/health")
@@ -541,22 +501,18 @@ def health():
         "gemini": GEMINI_API_KEY is not None,
         "models": len(AVAILABLE_MODELS),
         "is_render": IS_RENDER,
-        "session_type": "firebase"
+        "session_type": "JWT"
     })
 
-# =========================
-# Run App
-# =========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print("\n" + "=" * 50)
     print("🚀 SMART CHITHI - AI LETTER GENERATOR")
     print("=" * 50)
-    print(f"Server:  http://localhost:{port}")
     print(f"Gemini:  {'✅' if GEMINI_API_KEY else '❌'}")
     print(f"Models:  {len(AVAILABLE_MODELS)}")
     print(f"Firebase: {'✅' if db else '❌'}")
-    print(f"Render:  {'✅' if IS_RENDER else '❌ (localhost)'}")
-    print(f"Session: Firebase-based ✅")
+    print(f"Render:  {'✅' if IS_RENDER else '❌ localhost'}")
+    print(f"Session: JWT ✅")
     print("=" * 50 + "\n")
     app.run(debug=True, host="0.0.0.0", port=port)
