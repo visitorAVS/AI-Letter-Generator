@@ -367,6 +367,15 @@
             background: var(--primary-dark);
         }
 
+        .btn-edit {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-edit:hover {
+            background: #2563eb;
+        }
+
         .btn-delete {
             background: var(--danger);
             color: white;
@@ -374,6 +383,101 @@
 
         .btn-delete:hover {
             background: #dc2626;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 200;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal.active {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 15px;
+        }
+
+        .modal-header h2 {
+            color: var(--dark);
+            margin: 0;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--gray);
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            color: var(--dark);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: flex-end;
+        }
+
+        .btn-cancel {
+            background: var(--border);
+            color: var(--dark);
+            padding: 10px 20px;
+        }
+
+        .btn-cancel:hover {
+            background: #d1d5db;
+        }
+
+        .btn-save {
+            background: var(--success);
+            color: white;
+            padding: 10px 20px;
+        }
+
+        .btn-save:hover {
+            background: #059669;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         @media (max-width: 1024px) {
@@ -396,6 +500,10 @@
             .letters-table th,
             .letters-table td {
                 padding: 10px;
+            }
+            .action-btn {
+                padding: 4px 8px;
+                font-size: 11px;
             }
         }
     </style>
@@ -519,16 +627,16 @@
                 </div>
 
                 <div id="actionButtons" class="action-buttons" style="display: none;">
-                    <button class="btn btn-primary" onclick="copyLetter()">
+                    <button class="btn btn-primary" type="button" onclick="copyLetter()">
                         <i class="fas fa-copy"></i> Copy to Clipboard
                     </button>
-                    <button class="btn btn-primary" onclick="downloadPDF()">
+                    <button class="btn btn-primary" type="button" onclick="downloadPDF()">
                         <i class="fas fa-file-pdf"></i> Download PDF
                     </button>
-                    <button class="btn btn-primary" onclick="downloadTXT()">
+                    <button class="btn btn-primary" type="button" onclick="downloadTXT()">
                         <i class="fas fa-file-download"></i> Download TXT
                     </button>
-                    <button class="btn btn-secondary" onclick="printLetter()">
+                    <button class="btn btn-primary" type="button" onclick="printLetter()">
                         <i class="fas fa-print"></i> Print
                     </button>
                 </div>
@@ -555,6 +663,43 @@
                     </tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Letter</h2>
+                <button class="modal-close" onclick="closeEditModal()">&times;</button>
+            </div>
+            <div id="editModalMessage"></div>
+            <form id="editForm">
+                <div class="form-group">
+                    <label>Subject</label>
+                    <input type="text" id="editSubject" placeholder="Subject">
+                </div>
+                <div class="form-group">
+                    <label>Sender Name</label>
+                    <input type="text" id="editSenderName" placeholder="Your Name">
+                </div>
+                <div class="form-group">
+                    <label>Recipient Name</label>
+                    <input type="text" id="editReceiverName" placeholder="Recipient Name">
+                </div>
+                <div class="form-group">
+                    <label>Recipient Designation</label>
+                    <input type="text" id="editReceiverDesignation" placeholder="Designation">
+                </div>
+                <div class="form-group">
+                    <label>Letter Content</label>
+                    <textarea id="editContent" style="min-height: 300px; font-family: Georgia, serif;"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-cancel" onclick="closeEditModal()">Cancel</button>
+                    <button type="button" class="btn btn-save" onclick="saveEditedLetter()">Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
 

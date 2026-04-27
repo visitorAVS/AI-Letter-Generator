@@ -139,6 +139,18 @@ def save_to_firebase(letter_data, user_id):
         print("Firebase save error:", e)
         return None
 
+def update_letter_firebase(user_id, letter_id, letter_data):
+    """Update existing letter"""
+    if db is None:
+        return False
+    try:
+        letter_data["updated_at"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        db.collection("users").document(user_id).collection("letters").document(letter_id).update(letter_data)
+        return True
+    except Exception as e:
+        print("Firebase update error:", e)
+        return False
+
 def load_user_letters(user_id):
     if db is None:
         return []
@@ -237,22 +249,26 @@ RULES:
     return "Error: No available models could generate the letter."
 
 def create_pdf_from_letter(letter_content, subject, sender_name):
+    """Create PDF from letter content"""
     try:
         pdf = FPDF()
         pdf.set_margins(20, 20, 20)
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=20)
 
+        # Title
         pdf.set_font("Helvetica", style="B", size=14)
         safe_subject = subject.encode("latin-1", "replace").decode("latin-1")
         pdf.cell(0, 10, safe_subject, new_x="LMARGIN", new_y="NEXT", align="C")
         pdf.ln(4)
 
+        # Separator line
         pdf.set_draw_color(102, 126, 234)
         pdf.set_line_width(0.5)
         pdf.line(20, pdf.get_y(), 190, pdf.get_y())
         pdf.ln(6)
 
+        # Letter content
         pdf.set_font("Helvetica", size=11)
         for line in letter_content.split("\n"):
             safe_line = line.encode("latin-1", "replace").decode("latin-1")
@@ -261,6 +277,7 @@ def create_pdf_from_letter(letter_content, subject, sender_name):
             else:
                 pdf.ln(4)
 
+        # Footer
         pdf.ln(6)
         pdf.set_draw_color(200, 200, 200)
         pdf.line(20, pdf.get_y(), 190, pdf.get_y())
@@ -278,6 +295,8 @@ def create_pdf_from_letter(letter_content, subject, sender_name):
         return pdf_buffer
     except Exception as e:
         print(f"PDF creation error: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 # =========================
@@ -428,6 +447,13 @@ def generate():
     try:
         user = get_current_user()
         data = request.get_json()
+        
+        # Validate required fields
+        if not all([data.get("letterType"), data.get("senderName"), 
+                   data.get("receiverName"), data.get("receiverDesignation"), 
+                   data.get("subject")]):
+            return jsonify({"success": False, "error": "Missing required fields"}), 400
+        
         letter_content = generate_letter_with_gemini(
             data.get("letterType"), data.get("language"),
             data.get("senderName"), data.get("receiverName"),
@@ -435,6 +461,7 @@ def generate():
             data.get("reason", ""), data.get("tone"),
             data.get("organization", "")
         )
+        
         letter_data = {
             "letterType": data.get("letterType"),
             "language": data.get("language"),
@@ -450,6 +477,55 @@ def generate():
         letter_id = save_to_firebase(letter_data, user["uid"])
         return jsonify({"success": True, "letter": letter_content, "letterId": letter_id})
     except Exception as e:
+        print(f"Generate error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route("/edit/<letter_id>", methods=["POST"])
+@login_required
+def edit_letter(letter_id):
+    """Edit existing letter"""
+    try:
+        user = get_current_user()
+        data = request.get_json()
+        
+        # Get existing letter
+        letter = get_letter_from_firebase(user["uid"], letter_id)
+        if not letter:
+            return jsonify({"success": False, "error": "Letter not found"}), 404
+        
+        # Update specific fields
+        update_data = {}
+        if "content" in data:
+            update_data["content"] = data["content"]
+        if "subject" in data:
+            update_data["subject"] = clean_subject(data["subject"])
+        if "senderName" in data:
+            update_data["senderName"] = data["senderName"]
+        if "receiverName" in data:
+            update_data["receiverName"] = data["receiverName"]
+        if "receiverDesignation" in data:
+            update_data["receiverDesignation"] = data["receiverDesignation"]
+        if "reason" in data:
+            update_data["reason"] = data["reason"]
+        
+        if not update_data:
+            return jsonify({"success": False, "error": "No fields to update"}), 400
+        
+        success = update_letter_firebase(user["uid"], letter_id, update_data)
+        
+        if success:
+            # Get updated letter
+            updated_letter = get_letter_from_firebase(user["uid"], letter_id)
+            return jsonify({"success": True, "letter": updated_letter})
+        else:
+            return jsonify({"success": False, "error": "Failed to update letter"}), 500
+            
+    except Exception as e:
+        print(f"Edit error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route("/history")
@@ -463,7 +539,9 @@ def history():
 def get_letter(letter_id):
     user = get_current_user()
     letter = get_letter_from_firebase(user["uid"], letter_id)
-    return jsonify(letter) if letter else jsonify({"error": "Not found"}), 404
+    if letter:
+        return jsonify(letter)
+    return jsonify({"error": "Not found"}), 404
 
 @app.route("/delete/<letter_id>", methods=["DELETE"])
 @login_required
@@ -471,26 +549,83 @@ def delete_letter(letter_id):
     user = get_current_user()
     if delete_from_firebase(user["uid"], letter_id):
         return jsonify({"success": True})
-    return jsonify({"success": False}), 500
+    return jsonify({"success": False, "error": "Failed to delete"}), 500
 
 @app.route("/download-pdf/<letter_id>")
 @login_required
 def download_pdf(letter_id):
+    """Download letter as PDF"""
     try:
         user = get_current_user()
         letter = get_letter_from_firebase(user["uid"], letter_id)
+        
         if not letter:
             return jsonify({"error": "Letter not found"}), 404
-        pdf_buffer = create_pdf_from_letter(
-            letter.get("content", ""),
-            letter.get("subject", "Letter"),
-            letter.get("senderName", "User")
-        )
+        
+        # Extract letter details
+        content = letter.get("content", "")
+        if not content:
+            return jsonify({"error": "Letter content is empty"}), 400
+        
+        subject = letter.get("subject", "Letter")
+        sender_name = letter.get("senderName", "User")
+        
+        # Create PDF
+        pdf_buffer = create_pdf_from_letter(content, subject, sender_name)
+        
         if not pdf_buffer:
-            return jsonify({"error": "PDF generation failed"}), 500
-        filename = f"{letter.get('letterType', 'letter').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-        return send_file(pdf_buffer, mimetype='application/pdf', as_attachment=True, download_name=filename)
+            return jsonify({"error": "Failed to generate PDF"}), 500
+        
+        # Generate filename
+        letter_type = letter.get("letterType", "letter").replace(" ", "_")
+        filename = f"{letter_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        
+        return send_file(
+            pdf_buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+        
     except Exception as e:
+        print(f"PDF download error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/download-txt/<letter_id>")
+@login_required
+def download_txt(letter_id):
+    """Download letter as TXT"""
+    try:
+        user = get_current_user()
+        letter = get_letter_from_firebase(user["uid"], letter_id)
+        
+        if not letter:
+            return jsonify({"error": "Letter not found"}), 404
+        
+        content = letter.get("content", "")
+        if not content:
+            return jsonify({"error": "Letter content is empty"}), 400
+        
+        # Create buffer
+        buffer = BytesIO()
+        buffer.write(content.encode('utf-8'))
+        buffer.seek(0)
+        
+        # Generate filename
+        letter_type = letter.get("letterType", "letter").replace(" ", "_")
+        filename = f"{letter_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        
+        return send_file(
+            buffer,
+            mimetype='text/plain',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        print(f"TXT download error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/health")

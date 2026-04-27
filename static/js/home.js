@@ -1,10 +1,22 @@
 let currentLetter = null;
 let currentLetterId = null;
+let editingLetterId = null;
 
 window.addEventListener('load', () => {
     loadUserInfo();
     loadLetters();
+    setupModalHandlers();
 });
+
+function setupModalHandlers() {
+    const modal = document.getElementById('editModal');
+    // Close modal when clicking outside
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeEditModal();
+        }
+    });
+}
 
 function loadUserInfo() {
     fetch('/api/check-auth', {
@@ -34,17 +46,35 @@ async function generateLetter(event) {
     if (event) event.preventDefault();
 
     let letterType = document.getElementById('letterType').value;
-    if (!letterType) { showMessage('formMessage', '❌ Please select a letter type', 'error'); return; }
+    if (!letterType) { 
+        showMessage('formMessage', '❌ Please select a letter type', 'error'); 
+        return; 
+    }
 
     if (letterType === 'custom') {
         letterType = document.getElementById('customType').value;
-        if (!letterType) { showMessage('formMessage', '❌ Please enter a custom letter type', 'error'); return; }
+        if (!letterType) { 
+            showMessage('formMessage', '❌ Please enter a custom letter type', 'error'); 
+            return; 
+        }
     }
 
-    if (!document.getElementById('senderName').value) { showMessage('formMessage', '❌ Please enter your name', 'error'); return; }
-    if (!document.getElementById('receiverName').value) { showMessage('formMessage', '❌ Please enter recipient name', 'error'); return; }
-    if (!document.getElementById('receiverDesignation').value) { showMessage('formMessage', '❌ Please enter recipient designation', 'error'); return; }
-    if (!document.getElementById('subject').value) { showMessage('formMessage', '❌ Please enter subject', 'error'); return; }
+    if (!document.getElementById('senderName').value) { 
+        showMessage('formMessage', '❌ Please enter your name', 'error'); 
+        return; 
+    }
+    if (!document.getElementById('receiverName').value) { 
+        showMessage('formMessage', '❌ Please enter recipient name', 'error'); 
+        return; 
+    }
+    if (!document.getElementById('receiverDesignation').value) { 
+        showMessage('formMessage', '❌ Please enter recipient designation', 'error'); 
+        return; 
+    }
+    if (!document.getElementById('subject').value) { 
+        showMessage('formMessage', '❌ Please enter subject', 'error'); 
+        return; 
+    }
 
     document.getElementById('loading').style.display = 'block';
     document.getElementById('letterPreview').classList.remove('active');
@@ -94,25 +124,39 @@ async function generateLetter(event) {
 }
 
 function copyLetter() {
-    if (!currentLetter) { showMessage('formMessage', '❌ No letter to copy', 'error'); return; }
+    if (!currentLetter) { 
+        showMessage('formMessage', '❌ No letter to copy', 'error'); 
+        return; 
+    }
     navigator.clipboard.writeText(currentLetter)
         .then(() => showMessage('formMessage', '✅ Copied to clipboard!', 'success'))
         .catch(() => showMessage('formMessage', '❌ Copy failed', 'error'));
 }
 
 function downloadTXT() {
-    if (!currentLetter) { showMessage('formMessage', '❌ No letter to download', 'error'); return; }
-    const el = document.createElement('a');
-    el.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(currentLetter);
-    el.download = 'letter_' + Date.now() + '.txt';
-    document.body.appendChild(el);
-    el.click();
-    document.body.removeChild(el);
-    showMessage('formMessage', '✅ Downloaded as TXT!', 'success');
+    if (!currentLetter) { 
+        showMessage('formMessage', '❌ No letter to download', 'error'); 
+        return; 
+    }
+    try {
+        const el = document.createElement('a');
+        el.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(currentLetter);
+        el.download = 'letter_' + Date.now() + '.txt';
+        document.body.appendChild(el);
+        el.click();
+        document.body.removeChild(el);
+        showMessage('formMessage', '✅ Downloaded as TXT!', 'success');
+    } catch (error) {
+        showMessage('formMessage', '❌ Download failed: ' + error.message, 'error');
+    }
 }
 
 function downloadPDF() {
-    if (!currentLetterId) { showMessage('formMessage', '❌ Generate a letter first', 'error'); return; }
+    if (!currentLetterId) { 
+        showMessage('formMessage', '❌ Generate a letter first', 'error'); 
+        return; 
+    }
+    
     showMessage('formMessage', '⏳ Generating PDF...', 'success');
 
     fetch(`/download-pdf/${currentLetterId}`, {
@@ -120,38 +164,61 @@ function downloadPDF() {
     })
         .then(response => {
             const contentType = response.headers.get('content-type') || '';
-            if (!response.ok || !contentType.includes('application/pdf')) {
-                return response.json().then(errData => {
-                    throw new Error(errData.error || 'PDF generation failed');
-                }).catch(() => {
+            
+            if (!response.ok) {
+                // Try to parse JSON error
+                if (contentType.includes('application/json')) {
+                    return response.json().then(errData => {
+                        throw new Error(errData.error || `Server error: ${response.status}`);
+                    });
+                } else {
                     throw new Error(`Server error: ${response.status}`);
-                });
+                }
             }
+            
+            if (!contentType.includes('application/pdf')) {
+                throw new Error('Invalid response type. Expected PDF.');
+            }
+            
             return response.blob();
         })
         .then(blob => {
-            if (blob.size === 0) throw new Error('PDF file is empty');
+            if (blob.size === 0) {
+                throw new Error('PDF file is empty');
+            }
+            
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `letter_${Date.now()}.pdf`;
             document.body.appendChild(a);
             a.click();
-            URL.revokeObjectURL(url);
             document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
             showMessage('formMessage', '✅ PDF Downloaded successfully!', 'success');
         })
-        .catch(e => showMessage('formMessage', '❌ PDF Error: ' + e.message, 'error'));
+        .catch(e => {
+            console.error('PDF download error:', e);
+            showMessage('formMessage', '❌ PDF Error: ' + e.message, 'error');
+        });
 }
 
 function printLetter() {
-    if (!currentLetter) { showMessage('formMessage', '❌ No letter to print', 'error'); return; }
-    const w = window.open('', '', 'height=600,width=800');
-    w.document.write('<html><head><title>Letter</title><style>body{font-family:Georgia,serif;line-height:1.8;margin:40px;color:#1e3a8a;}pre{white-space:pre-wrap;word-wrap:break-word;}</style></head><body>');
-    w.document.write('<pre>' + currentLetter + '</pre>');
-    w.document.write('</body></html>');
-    w.document.close();
-    w.print();
+    if (!currentLetter) { 
+        showMessage('formMessage', '❌ No letter to print', 'error'); 
+        return; 
+    }
+    try {
+        const w = window.open('', '', 'height=600,width=800');
+        w.document.write('<html><head><title>Letter</title><style>body{font-family:Georgia,serif;line-height:1.8;margin:40px;color:#1e3a8a;}pre{white-space:pre-wrap;word-wrap:break-word;}</style></head><body>');
+        w.document.write('<pre>' + currentLetter + '</pre>');
+        w.document.write('</body></html>');
+        w.document.close();
+        w.print();
+    } catch (error) {
+        showMessage('formMessage', '❌ Print failed: ' + error.message, 'error');
+    }
 }
 
 async function loadLetters() {
@@ -174,12 +241,15 @@ async function loadLetters() {
                 <td>${formatDate(letter.created_at)}</td>
                 <td>
                     <button class="action-btn btn-view" onclick="viewLetter('${letter.id}')">👁 View</button>
+                    <button class="action-btn btn-edit" onclick="openEditModal('${letter.id}')">✏️ Edit</button>
                     <button class="action-btn btn-delete" onclick="deleteLetter('${letter.id}')">🗑 Delete</button>
                 </td>
             </tr>
         `).join('');
     } catch (error) {
         console.error('Error loading letters:', error);
+        const tbody = document.getElementById('lettersBody');
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#999;">Error loading letters</td></tr>';
     }
 }
 
@@ -189,7 +259,10 @@ function viewLetter(id) {
     })
         .then(r => r.json())
         .then(letter => {
-            if (letter.error) { showMessage('formMessage', '❌ Letter not found', 'error'); return; }
+            if (letter.error) { 
+                showMessage('formMessage', '❌ Letter not found', 'error'); 
+                return; 
+            }
             currentLetter = letter.content;
             currentLetterId = letter.id;
             document.getElementById('letterPreview').textContent = currentLetter;
@@ -198,7 +271,82 @@ function viewLetter(id) {
             document.getElementById('actionButtons').style.display = 'flex';
             window.scrollTo({ top: 0, behavior: 'smooth' });
         })
-        .catch(e => showMessage('formMessage', '❌ Error: ' + e.message, 'error'));
+        .catch(e => {
+            console.error('View error:', e);
+            showMessage('formMessage', '❌ Error: ' + e.message, 'error');
+        });
+}
+
+function openEditModal(id) {
+    editingLetterId = id;
+    fetch(`/history/${id}`, {
+        credentials: 'include'
+    })
+        .then(r => r.json())
+        .then(letter => {
+            if (letter.error) { 
+                showMessage('editModalMessage', '❌ Letter not found', 'error'); 
+                return; 
+            }
+            
+            // Populate form
+            document.getElementById('editSubject').value = letter.subject || '';
+            document.getElementById('editSenderName').value = letter.senderName || '';
+            document.getElementById('editReceiverName').value = letter.receiverName || '';
+            document.getElementById('editReceiverDesignation').value = letter.receiverDesignation || '';
+            document.getElementById('editContent').value = letter.content || '';
+            
+            // Show modal
+            document.getElementById('editModal').classList.add('active');
+        })
+        .catch(e => {
+            console.error('Edit error:', e);
+            showMessage('editModalMessage', '❌ Error: ' + e.message, 'error');
+        });
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('active');
+    document.getElementById('editForm').reset();
+    document.getElementById('editModalMessage').innerHTML = '';
+    editingLetterId = null;
+}
+
+async function saveEditedLetter() {
+    if (!editingLetterId) return;
+    
+    try {
+        const response = await fetch(`/edit/${editingLetterId}`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subject: document.getElementById('editSubject').value,
+                senderName: document.getElementById('editSenderName').value,
+                receiverName: document.getElementById('editReceiverName').value,
+                receiverDesignation: document.getElementById('editReceiverDesignation').value,
+                content: document.getElementById('editContent').value
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showMessage('editModalMessage', '✅ Letter updated successfully!', 'success');
+            currentLetter = data.letter.content;
+            currentLetterId = data.letter.id;
+            setTimeout(() => {
+                closeEditModal();
+                loadLetters();
+                viewLetter(editingLetterId);
+            }, 1500);
+        } else {
+            showMessage('editModalMessage', '❌ ' + (data.error || 'Failed to update'), 'error');
+        }
+    } catch (error) {
+        console.error('Save error:', error);
+        showMessage('editModalMessage', '❌ Error: ' + error.message, 'error');
+    }
 }
 
 function deleteLetter(id) {
@@ -224,7 +372,10 @@ function deleteLetter(id) {
                 showMessage('formMessage', '❌ Failed to delete letter', 'error');
             }
         })
-        .catch(e => showMessage('formMessage', '❌ Error: ' + e.message, 'error'));
+        .catch(e => {
+            console.error('Delete error:', e);
+            showMessage('formMessage', '❌ Error: ' + e.message, 'error');
+        });
 }
 
 function logout() {
@@ -241,7 +392,11 @@ function showMessage(elementId, message, type) {
     const el = document.getElementById(elementId);
     if (!el) return;
     el.innerHTML = `<div class="message ${type}">${message}</div>`;
-    setTimeout(() => { el.innerHTML = ''; }, 5000);
+    if (type === 'error') {
+        setTimeout(() => { el.innerHTML = ''; }, 6000);
+    } else {
+        setTimeout(() => { el.innerHTML = ''; }, 4000);
+    }
 }
 
 function formatDate(dateString) {
